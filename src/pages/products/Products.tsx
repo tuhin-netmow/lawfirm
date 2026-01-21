@@ -1,0 +1,348 @@
+import { DataTable } from "@/components/dashboard/components/DataTable";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+//import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import type { ColumnDef } from "@tanstack/react-table";
+import {
+  // AlertCircle,
+  AlertTriangle,
+  Boxes,
+  CheckCircle,
+  MoreHorizontal,
+  PackagePlus,
+  Tags,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Link } from "react-router";
+import type { Product } from "@/types/types";
+import { useState } from "react";
+import {
+  useDeleteProductMutation,
+  useGetAllProductsQuery,
+  useGetProductStatsQuery,
+} from "@/store/features/admin/productsApiService";
+import { toast } from "sonner";
+import { useAppSelector } from "@/store/store";
+import { selectCurrency } from "@/store/currencySlice";
+// import { ProductPermission } from "@/config/permissions";
+
+export default function Products() {
+  const [page, setPage] = useState<number>(1);
+  const [search, setSearch] = useState<string>("");
+  const limit = 10;
+  // const userPermissions = useAppSelector((state) => state.auth.user?.role.permissions || []);
+  // const canCreateProduct = userPermissions.includes(ProductPermission.CREATE)|| userPermissions.includes(SuperAdminPermission.ACCESS_ALL);
+
+const {data: productStatsData} = useGetProductStatsQuery(undefined);
+
+//const productStats = productStatsData?.data;
+console.log("productStats", productStatsData);
+
+const totalProductsCount = productStatsData?.data?.filter(
+  (p: { label: string; value: number }) => p.label === "Total Products"
+)?.[0]?.value || 0;
+
+const activeProductsCount = productStatsData?.data?.filter(
+  (p: { label: string; value: number }) => p.label === "Active Products"
+)?.[0]?.value || 0;
+
+const lowStockCount = productStatsData?.data?.filter(
+  (p: { label: string; value: number }) => p.label === "Low Stock"
+)?.[0]?.value || 0;
+
+const totalStockCount = productStatsData?.data?.filter(
+  (p: { label: string; value: number }) => p.label === "Total Stock"
+)?.[0]?.value || 0;
+
+const stats = [
+  {
+    label: "Total Products",
+    value: totalProductsCount,
+    color: "bg-blue-600",
+    icon: <Boxes className="w-10 h-10 opacity-80" />,
+  },
+  {
+    label: "Active Products",
+    value: activeProductsCount,
+    color: "bg-green-700",
+    icon: <CheckCircle className="w-10 h-10 opacity-80" />,
+  },
+  {
+    label: "Low Stock",
+    value: lowStockCount,
+    color: "bg-red-600",
+    icon: <AlertTriangle className="w-10 h-10 opacity-80" />,
+  },
+  {
+    label: "Total Stock",
+    value: totalStockCount,
+    color: "bg-cyan-500",
+    icon: <Boxes className="w-10 h-10 opacity-80" />,
+  },
+];
+
+  const {
+    data: fetchedProducts,
+    isFetching,
+    refetch: refetchProducts,
+  } = useGetAllProductsQuery({ page, limit, search });
+
+  const products: Product[] = fetchedProducts?.data || [];
+  //console.log("Fetched Products: ", fetchedProducts);
+  const pagination = fetchedProducts?.pagination ?? {
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPage: 1,
+  };
+
+  const [deleteProduct] = useDeleteProductMutation();
+  const handleDeleteProduct = async (id: number) => {
+    // Ask for confirmation using a simple toast with prompt
+    const confirmed = await new Promise<boolean>((resolve) => {
+      toast("Are you sure you want to delete this product?", {
+        action: {
+          label: "Delete",
+          onClick: () => resolve(true), // user confirmed
+        },
+        duration: 10000, // auto-dismiss after 5s
+      });
+
+      // resolve false if toast disappears automatically
+      setTimeout(() => resolve(false), 10000);
+    });
+
+    console.log("User confirmed deletion: ", confirmed);
+
+    if (!confirmed) return; // stop if user didn’t confirm
+
+    try {
+      const res = await deleteProduct(id).unwrap();
+      if (res.status) {
+        toast.success("Product deleted successfully");
+        refetchProducts();
+      } else {
+        toast.error("Failed to delete unit");
+      }
+    } catch (error) {
+      console.error("Error deleting unit:", error);
+      toast.error(
+        "Failed to delete unit" +
+        (error instanceof Error ? ": " + error.message : "")
+      );
+    }
+  };
+
+  const currency = useAppSelector(selectCurrency);
+
+  const productColumns: ColumnDef<Product>[] = [
+    {
+      accessorKey: "sku",
+      header: "SKU",
+    },
+    {
+      accessorKey: "name",
+      header: "Product Name",
+    },
+    {
+      accessorKey: "thumb_url",
+      header: "Image",
+      cell: ({ row }) => (
+        <img
+          src={row.original.thumb_url}
+          alt={row.original.name}
+          className="w-10 h-10 rounded-full"
+        />
+      ),
+    },
+    {
+      accessorKey: "category",
+      header: "Category",
+      cell: ({ row }) => row?.original?.category?.name
+    },
+    {
+      accessorKey: "cost",
+      header: `Cost Price ${currency ? `(${currency})` : ""}`,
+      cell: ({ row }) => <span>{parseFloat(row.getValue("cost")).toFixed(2)}</span>,
+    },
+    {
+      accessorKey: "price",
+      header: `Selling Price ${currency ? `(${currency})` : ""}`,
+      cell: ({ row }) => <span>{parseFloat(row.getValue("price")).toFixed(2)}</span>,
+    },
+    {
+      accessorKey: "purchase_tax",
+      header: `Purchase Tax ${currency ? `(${currency})` : ""}`,
+      cell: ({ row }) => <span>{parseFloat(row.getValue("purchase_tax")).toFixed(2)}</span>,
+    },
+    {
+      accessorKey: "sales_tax",
+      header: `Sales Tax ${currency ? `(${currency})` : ""}`,
+      cell: ({ row }) => <span>{parseFloat(row.getValue("sales_tax")).toFixed(2)}</span>,
+    },
+    // {
+    //   accessorKey: "unit",
+    //   header: "Unit",
+    //   cell: ({ row }) =>
+    //     `${row.original.unit.name} (${row.original.unit.symbol})`,
+    // },
+    {
+      accessorKey: "stock_quantity",
+      header: "Stock",
+      cell: ({ row }) => row.original.stock_quantity,
+    },
+    {
+      accessorKey: "is_active",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.original.is_active;
+        const bgColor = status ? "bg-green-500" : "bg-red-500";
+        return (
+          <span
+            className={`py-1 px-2 rounded-full text-xs text-white font-medium ${bgColor}`}
+          >
+            {status ? "Active" : "Inactive"}
+          </span>
+        );
+      },
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      cell: ({ row }) => {
+        const product = row.original;
+
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <Link
+                  to={`/dashboard/products/${product.id}/edit`}
+                  className="w-full"
+                >
+                  Edit
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <Link
+                  to={`/dashboard/products/${product.id}`}
+                  className="w-full"
+                >
+                  View
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => handleDeleteProduct(product.id)}
+                className="cursor-pointer"
+              >
+                Delete
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <Link
+                  to={`/dashboard/products/${product.id}/stock`}
+                  className="w-full"
+                >
+                  Stock
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div className="w-full">
+      <div className="flex flex-wrap justify-between items-center mb-6">
+        <h2 className="text-3xl font-semibold">Product Management</h2>
+
+        <div className="flex flex-wrap items-center gap-4">
+          {/* <button className="flex items-center gap-2 bg-yellow-400 text-black px-4 py-2 rounded-lg shadow-sm hover:bg-yellow-300">
+            <AlertCircle size={18} />
+            Stock Alerts
+          </button> */}
+
+          <Link to="/dashboard/products/categories">
+            <button className="flex items-center gap-2 bg-cyan-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-cyan-500">
+              <Tags size={18} />
+              Categories
+            </button>
+          </Link>
+
+          {/* {
+            canCreateProduct && <Link to="/dashboard/products/create">
+              <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-500">
+                <PackagePlus size={18} />
+                Add Product
+              </button>
+            </Link>
+          } */}
+
+          <Link to="/dashboard/products/create">
+            <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-blue-500">
+              <PackagePlus size={18} />
+              Add Product
+            </button>
+          </Link>
+
+
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+        {stats.map((item, idx) => (
+          <div
+            key={idx}
+            className={`${item.color} text-white rounded-xl p-5 flex justify-between items-center shadow`}
+          >
+            <div>
+              <h3 className="text-3xl font-bold">{item.value}</h3>
+              <p className="text-sm mt-1 opacity-90">{item.label}</p>
+            </div>
+            {item.icon}
+          </div>
+        ))}
+      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>All Products</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            columns={productColumns}
+            data={products}
+            pageIndex={page - 1}
+            pageSize={limit}
+            totalCount={pagination.total}
+            onPageChange={(newPageIndex) => setPage(newPageIndex + 1)}
+            onSearch={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
+            isFetching={isFetching}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
