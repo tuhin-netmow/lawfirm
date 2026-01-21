@@ -23,7 +23,6 @@ import {
   Users,
   Clock,
   TrendingUp,
-  FileText,
   DollarSign,
   CalendarDays
 } from "lucide-react";
